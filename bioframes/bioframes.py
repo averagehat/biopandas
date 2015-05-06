@@ -3,7 +3,7 @@ from functools import partial
 from Bio import SeqIO
 import pandas as pd
 import numpy as np
-from past.builtins import map, filter
+#from past.builtins import map, filter
 from operator import attrgetter as attr
 from operator import add, div, itemgetter
 from func import partial, partial2, compose, pmap, pfilter, pstrip, psplit, fzip, _id, compose_all
@@ -159,6 +159,18 @@ def collection_as_df(lambdas, columns, collection):
     values = (list( func(obj) for func in lambdas) for obj in collection)
     return pd.DataFrame(values, columns=columns)
 
+def load_vcf(vcf_records):
+    '''
+    Convert a list of vcf Records to a pandas DataFrame.
+    '''
+    return pd.DataFrame(flatten_vcf(rec) for rec in vcf_records)
+
+#TODO: properly handle [None], '-', etc.
+
+vcalls = None
+ambiguous = None
+'''
+df[operator.ge(df[field], df[field])]
 
 
 def df_by_attrs(columns, collection):
@@ -180,4 +192,6 @@ def df_by_attrs(columns, collection):
 #    columns =  flat_vcf.keys()
 #    attrs = map(attr, fields)
 #    _object = _id
+
+
 

@@ -4,7 +4,16 @@ import string
 #notin = compose(_not, operator.methodcaller('__contains__'))
 #notin = compose(_not, attr('__contains__'))
 #mismatches = pfilter(notin('M='))
-
+def merge_dicts(*dict_args):
+    '''
+    from http://stackoverflow.com/a/26853961
+    Given any number of dicts, shallow copy and merge into a new dict,
+    precedence goes to key value pairs in latter dicts.
+    '''
+    result = {}
+    for dictionary in dict_args:
+        result.update(dictionary)
+    return result
 def _not(x):
     return not x
 def partial2(method, param):
@@ -32,6 +41,22 @@ def compose(outer, inner):
         return outer(inner(*args, **kwargs))
     return newfunc
 
+
+starcompose2 = lambda f, g: lambda x: f(*g(x))
+
+#starcompose = partial(reduce, starcompose2) #need splat
+def starcompose(*funcs):
+    return reduce(starcompose2, funcs)
+
+
+
+
+
+def compose(outer, inner):
+    ''' compose(f, g)(x) == f(g(x)) '''
+    def newfunc(*args, **kwargs):
+        return outer(inner(*args, **kwargs))
+    return newfunc
 def fzip(funcs, args):
     for func, arg in izip(funcs, args):
         yield func(arg)

@@ -44,6 +44,9 @@ FFFFFFFFF
 '''
         with open('tmp.fq', 'w') as tmp: tmp.write(self.fastq_string)
         self.df = bf.load_fastq(open('tmp.fq'))
+
+        #TODO: somehow SeqIO broke when I tried to mock_open
+
 #        with mock.patch.object(builtins, 'open', mock.mock_open(read_data=self.fastq_string)): #, create = True) as m:
 #            with open('_') as handle:
 #                self.df = bf.load_fastq(handle)
