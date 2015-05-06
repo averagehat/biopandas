@@ -44,11 +44,9 @@ qual_to_error = compose(pmap(error), qual_to_phreds)
 
 get_fastq = partial(SeqIO.parse, format='fastq')
 def init_all(fileh):
-    #import ipdb; ipdb.set_trace()
     fq = get_fastq(fileh)
-    print('in init_all')
     dicts = map(get_row, fq)
-    return pd.DataFrame(dicts, index=index, columns=columns)
+    return pd.DataFrame(dicts).set_index(index) #, index=index, columns=columns)
 
 
 #SANGER_OFFSET = 33
@@ -59,7 +57,8 @@ get_seq= compose(str, attr('seq'))
 get_qual_ints = compose_all(np.array, itemgetter('phred_quality'), attr('_per_letter_annotations'))
 get_description = attr('description')
 get_quality = SeqIO.QualityIO._get_sanger_quality_str
-get_error = compose_all(np.array, pmap(error), get_qual_ints)
+#get_error = compose_all(np.array, pmap(error), get_qual_ints)
+get_error = compose_all(np.vectorize(error), get_qual_ints)
 ''' applies directly to the seqrecord object '''
 index = ['id']
 
@@ -78,20 +77,18 @@ _object = _id
 def init(fileh):
     return pd.DataFrame(index=index, columns=columns)
 
-
-def __init__():
-    pass
+def apply_each(funcs, arg):
+    return fzip(funcs, repeat(arg))
 
 def get_row(record):
     #record = next(fileh)
     import sys
     __module__ = sys.modules[__name__]
-    print(record)
     clen = len(columns)
     get_getter = compose(attr, "get_{0}".format)
     _getters = map(get_getter, columns)
-    self_getters = fzip(_getters, repeat(__module__, clen))
-    results = fzip(self_getters, repeat(record, clen))
+    self_getters = apply_each(_getters, __module__) #fzip(_getters, repeat(__module__, clen))
+    results = apply_each(self_getters, record)
     final_dict = dict(zip(columns, results))
     final_schema.validate(final_dict)
     return final_dict

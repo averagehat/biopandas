@@ -1,0 +1,19 @@
+*** Settings ***
+Library         Process
+Library         OperatingSystem
+Suite Teardown          Terminate All Processes    
+
+*** Variables ***
+#${ ${TEMPDIR}, ${EXECDIR} are useful
+
+*** Test Cases *** 
+Example 
+    ${result} =         Run Process     echo    "foo" 
+    Should Contain          ${result.stdout}        foo
+
+python_template Main
+    ${result} =         Run Process     python_template         
+    # Check system exited  correctly
+    Should Be Equal As Integers         ${result.rc}        0 
+    # Check output
+    Should Be Equal As Strings          ${result.stdout}        specific output\n
