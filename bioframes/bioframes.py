@@ -1,14 +1,12 @@
 from __future__ import print_function
 from functools import partial
 from Bio import SeqIO
-import pandas as pd
 import numpy as np
 #from past.builtins import map, filter
 from operator import attrgetter as attr
 from operator import add, div, itemgetter
-from func import partial, partial2, compose, pmap, pfilter, pstrip, psplit, fzip, _id, compose_all
-from itertools import repeat
-from schema import Schema
+from func import partial2, compose, pmap, pifilter,  \
+    psplit,  _id, compose_all, ilen
 #TODO:
 
 def check_np_type(_type_str):
@@ -23,111 +21,31 @@ Pileup
 Join VCF and Pileup
 '''
 
-class BioFrame(pd.DataFrame):
-    def find_duplicates(frame):
-        ''' not sure why this one works. '''
-        ''' for example, find pcr duplicates by finding duplicate reads'''
-        #df2[df2['b'] == df2['b'] & (df2['a'] == df2['a'])]
-        ''' duplicated by defaults returns all but the first occurrence; take_last takes only the first occurence,
-        so unioning them (via | (or)), returns all duplicates. accepts any number of keys. '''
-        frame[frame.duplicated(['b'],take_last=True) | frame.duplicated(['b'])]
-
-
-to_np_int = partial(np.array, dtype=int)
-minus33 = partial(add, -33)
-qual_int_sanger = compose(minus33, ord)
-''' Error = 10^-(Phred/10) '''
-qual_to_phreds = compose(to_np_int, pmap(qual_int_sanger))
-error = compose(partial(pow, 10), partial2(div, -10))
-qual_to_error = compose(pmap(error), qual_to_phreds)
 
 
 get_fastq = partial(SeqIO.parse, format='fastq')
-def init_all(fileh):
-    fq = get_fastq(fileh)
-    dicts = map(get_row, fq)
-    return pd.DataFrame(dicts).set_index(index) #, index=index, columns=columns)
+get_fasta = partial(SeqIO.parse, format='fasta')
+to_np_int = partial(np.array, dtype=int)
+gccontent = compose(ilen, pifilter('GC'.__contains__))
+
+minus33 = partial(add, -33)
+qual_int_sanger = compose(minus33, ord)
+
+''' Error = 10^-(Phred/10) '''
+qual_to_phreds = compose(to_np_int, pmap(qual_int_sanger))
+error = compose(partial(pow, 10), partial2(div, -10.0))
+#don't need to map because numpy vectorizes it automatically
+#TODO: handle non-sanger version
+sanger_qual_str_to_error = compose(error, qual_to_phreds)
+
+
 
 
 #SANGER_OFFSET = 33
-columns = ('id', 'seq', 'quality', 'description', 'qual_ints', 'error')
-SANGER = True
-get_id = attr('id')
-get_seq= compose(str, attr('seq'))
-get_qual_ints = compose_all(np.array, itemgetter('phred_quality'), attr('_per_letter_annotations'))
-get_description = attr('description')
-get_quality = SeqIO.QualityIO._get_sanger_quality_str
-#get_error = compose_all(np.array, pmap(error), get_qual_ints)
-get_error = compose_all(np.vectorize(error), get_qual_ints)
-''' applies directly to the seqrecord object '''
-index = ['id']
 
-#TODO: fix for 32-bit systems
-final_schema =  Schema({
-    'id' : str,
-    'seq' : str,
-    'quality' : str,
-    'qual_ints' : check_np_type('int64'),
-    'error' : check_np_type('float64'),
-    'description' : str
-})
-_object = _id
-
-
-def init(fileh):
-    return pd.DataFrame(index=index, columns=columns)
-
-def apply_each(funcs, arg):
-    return fzip(funcs, repeat(arg))
-
-def get_row(record):
-    #record = next(fileh)
-    import sys
-    __module__ = sys.modules[__name__]
-    clen = len(columns)
-    get_getter = compose(attr, "get_{0}".format)
-    _getters = map(get_getter, columns)
-    self_getters = apply_each(_getters, __module__) #fzip(_getters, repeat(__module__, clen))
-    results = apply_each(self_getters, record)
-    final_dict = dict(zip(columns, results))
-    final_schema.validate(final_dict)
-    return final_dict
-    #return pd.DataFrame(final_dict, index=index)
-
-#get_fastq_row = compose(get_row, get_fastq)
-load_fastq = init_all
-class Seq(object):
-    get_record = partial(SeqIO.parse, format='fastq')
-    #SANGER_OFFSET = 33
-    columns = ('id', 'seq', 'quality', 'description', 'qual_ints', 'error')
-    SANGER = True
-    get_id = attr('id')
-    get_seq= compose(str, attr('seq'))
-    get_qual_ints = compose(itemgetter('phred_quality'), attr('_per_letter_annotations'))
-    get_description = attr('description')
-    get_quality = SeqIO.QualityIO._get_sanger_quality_str
-    get_error = compose(pmap(error), get_qual_ints)
-#    phred_to_char = chr if not SANGER else compose(chr, lambda a: a - 33)
-#    get_qual_chars = compose(pmap(phred_to_char), get_qual_ints)
-    ''' applies directly to the seqrecord object '''
-    index = ['id']
-
-#get_final_dict = compose(self_getters, get_record)
-    #TODO: fix for 32-bit systems
-    final_schema =  {
-        'id' : str,
-        'seq' : str,
-        'quality' : str,
-        'qual_ints' : check_np_type('int64'),
-        'error' : check_np_type('float64')
-    }
-    _object = _id
-    '''
-    assert len(quality) == len(error) == len(phred_scores)
-    '''
-
-
-
+'''
+assert len(quality) == len(error) == len(phred_scores)
+'''
 
 
 #validate = scheme.validate
@@ -171,7 +89,7 @@ vcalls = None
 ambiguous = None
 '''
 df[operator.ge(df[field], df[field])]
-
+'''
 
 def df_by_attrs(columns, collection):
     attr_getters = map(attr, columns)

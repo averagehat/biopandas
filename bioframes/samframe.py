@@ -1,6 +1,6 @@
 import re
 import pandas as pd
-from bioframes import to_np_int
+from bioframes import to_np_int, sanger_qual_str_to_error
 from itertools import groupby
 from func import pmap, psplit, pstrip, compose, compose_all, merge_dicts, fzip, partial2, dictmap, starcompose
 from operator import itemgetter
@@ -118,7 +118,7 @@ def flag_dict(flag):
 def split_list(A, idx):
     return A[:idx], A[idx:]
 
-sam_columns = ["QNAME", "FLAG", "RNAME", "POS", "MAPQ", "CIGAR", "RNEXT", "PNEXT", "TLEN", "SEQ", "QUAL"]#, "OPTIONS"]
+sam_columns = ("QNAME", "FLAG", "RNAME", "POS", "MAPQ", "CIGAR", "RNEXT", "PNEXT", "TLEN", "SEQ", "QUAL") #optiosn
 
 
 #TODO: get_record function takes a filehandle and returns a single record via SeqIO, etc.
@@ -134,7 +134,9 @@ parse_fields_and_options = compose(parsers, fields_and_options)
 all_but_cigar_dict = starcompose(merge_dicts, parse_fields_and_options)
 get_cigar_dict = compose(parse_cigar, itemgetter('CIGAR'))
 get_flag_dict = compose(flag_dict, itemgetter('FLAG'))
-def read_samfile(fh):
+get_error = compose(sanger_qual_str_to_error, itemgetter('QUAL'))
+
+def load_sam(fh):
     dicts = map(get_row, ifilter(bool, fh.read().split('\n')))
     return pd.DataFrame(dicts)
 #TODO: do we really need indices? it complicates querying i tlooks like maybe where plays better with them
@@ -143,5 +145,6 @@ def read_samfile(fh):
 
 def get_row(row):
     result = all_but_cigar_dict(row)
-    return merge_dicts(result, get_cigar_dict(result), get_flag_dict(result))
+    return merge_dicts(result, get_cigar_dict(result), get_flag_dict(result), {'error' :  get_error(result)})
+
 

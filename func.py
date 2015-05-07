@@ -1,6 +1,11 @@
 from functools import partial
-from itertools import izip
+import itertools as it
 import string
+import sys
+
+PY3 = sys.version[0] == '3'
+imap, ifilter, izip = (map, filter, zip) if PY3 else (it.imap, it.ifilter, it.izip)
+
 #notin = compose(_not, operator.methodcaller('__contains__'))
 #notin = compose(_not, attr('__contains__'))
 #mismatches = pfilter(notin('M='))
@@ -14,8 +19,10 @@ def merge_dicts(*dict_args):
     for dictionary in dict_args:
         result.update(dictionary)
     return result
+
 def _not(x):
     return not x
+
 def partial2(method, param):
       def t(x):
               return method(x, param)
@@ -48,10 +55,6 @@ starcompose2 = lambda f, g: lambda x: f(*g(x))
 def starcompose(*funcs):
     return reduce(starcompose2, funcs)
 
-
-
-
-
 def compose(outer, inner):
     ''' compose(f, g)(x) == f(g(x)) '''
     def newfunc(*args, **kwargs):
@@ -64,12 +67,39 @@ def fzip(funcs, args):
 def dictmap(func, _dict):
     return dict( (key, func(val)) for key, val in _dict.items())
 
-def reverse(collection): return collection[::-1]
 
+def ilen(iterable):
+    return sum(1 for _ in iterable)
+
+def reverse(collection): return collection[::-1]
+pifilter = partial(partial, ifilter)
 compose_list = partial(reduce, compose)
-compose_all = compose(compose_list, lambda *a : a)
+compose_all = compose(compose_list, lambda *a: a)
 pmap = partial(partial, map)
 pfilter = partial(partial, filter)
 #TODO: could use partial2 instead
 pstrip = lambda x: partial(string.split, chars=x)
 psplit = lambda x: partial(string.split, sep=x)
+boolint = lambda x: 1 if x else 0
+dictzip = compose(dict, zip)
+#ilen = compose(sum, pmap(boolint))
+#Given a list of functons and names, return the result of those functions dictzipped witht the names.
+
+#TODO:
+''' dictfilter '''
+def apply_each(funcs, arg):
+    return fzip(funcs, it.repeat(arg))
+
+import inspect
+import types
+def is_local(object):
+   return isinstance(object, types.FunctionType) and object.__module__ == __name__
+    #use inspect.isfunction
+def get_funcs():
+    return inspect.getmembers(sys.modules[__name__], \
+                             predicate = lambda f: inspect.isfunction(f) and f.__module__ == __name__)
+    #return inspect.getmembers(sys.modules[__name__], predicate=is_local)
+    #return dict( ((name, func)) for name, func in locals().items() if is_local(name))
+#      for key, value in locals().items():
+#          if callable(value) and value.__module__ == __name__:
+#              l.append(key)
