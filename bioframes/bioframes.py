@@ -3,10 +3,16 @@ from functools import partial
 from Bio import SeqIO
 import numpy as np
 #from past.builtins import map, filter
+#from bioframes import sequenceframes
 from operator import attrgetter as attr
 from operator import add, div, itemgetter
 from func import partial2, compose, pmap, pifilter,  \
-    psplit,  _id, compose_all, ilen
+    psplit,  _id, compose_all, ilen, merge_dicts, starcompose, dictzip, \
+    apply_to_object, dictmap, kstarcompose
+
+from itertools import repeat
+import pandas as pd
+import vcf
 #TODO:
 
 def check_np_type(_type_str):
@@ -21,8 +27,12 @@ Pileup
 Join VCF and Pileup
 '''
 
+'''
+pcompose = partial(partial, compose)
+error_from_ints = pcompose(error)
+#sanger_qual_str_to_error = cmperror(qual_to_phreds)
 
-
+'''
 get_fastq = partial(SeqIO.parse, format='fastq')
 get_fasta = partial(SeqIO.parse, format='fasta')
 to_np_int = partial(np.array, dtype=int)
@@ -54,11 +64,12 @@ assert len(quality) == len(error) == len(phred_scores)
 
 
 def flatten_vcf(record):
+
     '''
     :param VCFRecord record: VCFRecord object
     :return dict: all fields as a flat dictionary, including those fields in rec.INFO
     '''
-    _ids = ['CHROM', 'REF', 'QUAL', 'POS', 'ALT', 'FILTER', 'FORMAT', 'ID', 'INFO']
+    _ids = ['CHROM', 'REF', 'QUAL', 'POS', 'ALT', 'FILTER', 'FORMAT', 'ID'] #'INFO'
     fields = [getattr(record, _id) for _id in _ids]
     d = dict( (_id, value) for  _id, value in zip(_ids, fields) )
     d.update(dict((_id, flatten_list(field)) for _id, field in record.INFO.items()))
@@ -82,14 +93,24 @@ def load_vcf(vcf_records):
     Convert a list of vcf Records to a pandas DataFrame.
     '''
     return pd.DataFrame(flatten_vcf(rec) for rec in vcf_records)
-
+flatten_list = lambda a: a if type(a) != list else a[0]
+load_vcf  = compose(load_vcf, vcf.Reader)
 #TODO: properly handle [None], '-', etc.
 
-vcalls = None
-ambiguous = None
-'''
-df[operator.ge(df[field], df[field])]
-'''
+#have one return the true/false series and the other do getitem i guess
+return_frame = partial(compose, df.__getitem__)
+def col_compare(df, col, value, comp):
+    half = partial(comp, value)
+    boolean = compose(half, df.__getitem__)
+    return boolean(col)
+
+simple_compare = return_frame(col_compare)
+
+def ambiguous(df):
+    return df[~df.CB.isin(list('AGCT'))]
+
+def vcalls(df):
+    return df[df.REF != df.CB]
 
 def df_by_attrs(columns, collection):
     attr_getters = map(attr, columns)
@@ -97,19 +118,40 @@ def df_by_attrs(columns, collection):
 
 
 
-#    np_type = attr('dtype')
-#    pis = partial(partial2, operator.is_)
-#    dtype_is = compose(pis, np.dtype)
-#    np_type_check = compose(dtype_is, attr('dtype'))
-#    compose(attr) foo
+#optionally dict(zip(columns, apply_each))
+#TODO: fix this, why doesn't repeat work?
+def makeframe(biodata):
+    dicts = []
+    while True:
+        try:
+            dicts.append(_create_dict(**biodata))
+        except StopIteration:
+            break
+    return pd.DataFrame(dicts)
 
-#class VCF(object):
-    #TODO: uncommnet
-#    fields = ['CHROM', 'REF', 'QUAL', 'POS', 'ALT', 'FILTER', 'FORMAT', 'ID', 'INFO']
-#    flat_vcf = flatten_vcf(_self)
-#    columns =  flat_vcf.keys()
-#    attrs = map(attr, fields)
-#    _object = _id
+#make_dicts = pmap(biodata_to_row)
+
+#make_fastq_frame = kstarcompose(makeframe, sequenceframes.fqframe)
+
+def obj_to_dict(obj, names_getters_map):
+    apply_to_obj = partial2(apply_to_object, obj)
+    return dictmap(apply_to_obj, names_getters_map)
+
+def _create_dict(obj_func, columns, getters, validator, dictgetters):
+    obj = apply(obj_func)
+    pre_dict = obj_to_dict(obj, dictzip(columns, getters))
+    #optional intermediate schema here
+    if dictgetters:
+        extra_dict = obj_to_dict(pre_dict, dictgetters)
+        full_dict = merge_dicts(pre_dict, extra_dict)
+    else:
+        full_dict = pre_dict
+    return validator.validate(full_dict)
+#    compose_all(merge_dicts, obj_to_dict, partial2(repeat, 2),
+    #do = starcompose(obj_to_dict, partial2(repeat, 2), obj_to_dict)
+    #return do(obj, dictzip(columns, getters)
 
 
-
+#rewrite
+#unpack_biodata = itemgetter('obj_func', 'columns', 'getters',  'validator','dictgetters')
+#biodata_to_row = starcompose(_create_row, unpack_biodata)

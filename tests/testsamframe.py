@@ -38,7 +38,7 @@ class TestSamframe(unittest.TestCase):
                          'read2	8 	chr2	1	1	3I3M4D	=	1	1	CTTCGATC	AFFDDDDD	NM:i:3	AS:i:2	XS:i:0	RG:Z:Sanger',
                          'read3	60	chr1	1	1	2D2M2I2M2=	=	1	1	CCGATCAA	FF@@@F@F	NM:i:3	AS:i:231	XS:i:0	RG:Z:MiSeq'])
 
-        self.result = mock_file(samframe.read_samfile, self.samtext)
+        self.result = mock_file(samframe.load_sam, self.samtext)
 
     def test_cigar_scores(self):
         #TODO: with mock_open

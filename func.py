@@ -2,6 +2,7 @@ from functools import partial
 import itertools as it
 import string
 import sys
+from collections import namedtuple
 
 PY3 = sys.version[0] == '3'
 imap, ifilter, izip = (map, filter, zip) if PY3 else (it.imap, it.ifilter, it.izip)
@@ -103,3 +104,30 @@ def get_funcs():
 #      for key, value in locals().items():
 #          if callable(value) and value.__module__ == __name__:
 #              l.append(key)
+
+
+'''
+compose columns + object + getters => dict
+- unzip
+
+have fqframe return a dict of functions, excluding get_row, openframe; instead passing it to a function which
+arranges the getters, applies them to a get_object function, and creates an intermediate dictionary.
+This function allows for optional extras, like samframe & fastq (rather than fasta
+'''
+
+
+unzip = starcompose(zip, _id)
+
+def nameddict(Name, _dict):
+    ''' dict to named tuple '''
+    names, values = unzip(_dict.items())
+    return namedtuple(Name, names)(*values)
+
+ppartial = partial(partial)
+apply_to_object = compose(apply, ppartial)
+
+kstarcompose2 = lambda f, g: lambda x: f(**g(x))
+def kstarcompose(*funcs):
+    return reduce(kstarcompose2, funcs)
+
+#kstarcompose = partial(reduce, kstarcompose2)

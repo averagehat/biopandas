@@ -3,12 +3,12 @@ from Bio.Seq import Seq
 from Bio.SeqRecord import SeqRecord
 import unittest
 #from bioframes import bioframes as bf
-import sequenceframes
+from bioframes import sequenceframes
 import sys
 import pandas as pd
 from pandas.util.testing import assert_series_equal, assert_frame_equal, assert_index_equal
 from numpy.testing import assert_array_equal, assert_array_almost_equal
-
+from bioframes import bioframes
 import numpy as np
 from operator import itemgetter
 if sys.version[0] == '2':
@@ -46,9 +46,10 @@ FFFFFFFFF
         with open('tmp.fq', 'w') as tmp: tmp.write(self.fastq_string)
         fq = sequenceframes.fqframe(open('tmp.fq'))
         #self.df = sequenceframes.load_fastq(open('tmp.fq'))
-        self.df = fq.load_fastq()
-        r_dict = fq.get_row(self.r)
-        self.series = pd.Series(r_dict)
+        self.df = bioframes.makeframe(fq)
+#        self.df = fq.load_fastq()
+#        r_dict = fq.get_row(self.r)
+#        self.series = pd.Series(r_dict)
         #r_dict = sequenceframes.get_row(self.r)
 
 
