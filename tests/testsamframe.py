@@ -1,4 +1,5 @@
-from bioframes import samframe
+#from bioframes import samframe
+import samframe
 import mock
 import pandas as pd
 from pandas.util.testing import assert_series_equal, assert_frame_equal, assert_index_equal

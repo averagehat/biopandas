@@ -75,14 +75,16 @@ def ilen(iterable):
 def reverse(collection): return collection[::-1]
 pifilter = partial(partial, ifilter)
 compose_list = partial(reduce, compose)
-compose_all = compose(compose_list, lambda *a: a)
+#   compose_all = compose(compose_list, lambda *a: a)
 pmap = partial(partial, map)
 pfilter = partial(partial, filter)
 #TODO: could use partial2 instead
-pstrip = lambda x: partial(string.split, chars=x)
+pstrip = lambda x: partial(string.strip, chars=x)
 psplit = lambda x: partial(string.split, sep=x)
+pjoin = lambda x: partial(string.join, sep=x)
 boolint = lambda x: 1 if x else 0
 dictzip = compose(dict, zip)
+cmp2=lambda f, g: lambda a, b: (f(a), g(b))
 #ilen = compose(sum, pmap(boolint))
 #Given a list of functons and names, return the result of those functions dictzipped witht the names.
 

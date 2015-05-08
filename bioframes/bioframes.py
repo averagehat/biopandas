@@ -8,9 +8,8 @@ from operator import attrgetter as attr
 from operator import add, div, itemgetter
 from func import partial2, compose, pmap, pifilter,  \
     psplit,  _id, compose_all, ilen, merge_dicts, starcompose, dictzip, \
-    apply_to_object, dictmap, kstarcompose
+    apply_to_object, dictmap, kstarcompose, cmp2, pjoin
 
-from itertools import repeat
 import pandas as pd
 import vcf
 #TODO:
@@ -98,7 +97,8 @@ load_vcf  = compose(load_vcf, vcf.Reader)
 #TODO: properly handle [None], '-', etc.
 
 #have one return the true/false series and the other do getitem i guess
-return_frame = partial(compose, df.__getitem__)
+#return_frame = partial(compose, df.__getitem__)
+return_frame = partial(compose, pd.DataFrame.__getitem__)
 def col_compare(df, col, value, comp):
     half = partial(comp, value)
     boolean = compose(half, df.__getitem__)
@@ -152,6 +152,37 @@ def _create_dict(obj_func, columns, getters, validator, dictgetters):
     #return do(obj, dictzip(columns, getters)
 
 
+
 #rewrite
 #unpack_biodata = itemgetter('obj_func', 'columns', 'getters',  'validator','dictgetters')
 #biodata_to_row = starcompose(_create_row, unpack_biodata)
+# optionally add space
+#TODO: how can we have the outfacing function accept both the output filehandle and the df/input handle
+raw_make_id = '>{0} {1}'.format
+cbs = itemgetter('CB')
+consensus = compose(pjoin(''), cbs)
+chrom_groups = partial(pd.DataFrame.groupby, 'CHROM')
+#write_consensus = compose(writer, ids_with_seqs)
+
+#TODO: have writ_consensus accept an outpath
+#TODO: What?
+def vcf(in_path, id_prefix):
+    writer = lambda f: partial(SeqIO.write, format='fasta', handle=open(f, 'w'))
+    make_id = partial(raw_make_id, id_prefix)
+    ids_with_seqs = compose_all(SeqRecord, cmp2(make_id, consensus), chrom_groups)
+    consensus_from_file = compose(ids_with_seqs, partial(load_vcf, in_path))
+    write_from_file = compose(writer, consensus_from_file)
+    return {'write_consensus' : write_from_file}
+
+
+
+    pass
+
+#load vcf
+#aggregate them all, then write all at once
+
+
+#given a group returun the consensus
+#given a refname and a group,
+
+
