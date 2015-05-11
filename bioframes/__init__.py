@@ -3,5 +3,5 @@ __release__ = __version__ + '-dev'
 __authors__ = 'Tyghe Vallard, Michael panciera'
 __authoremails__ = 'vallardt@gmail.com, michael.panciera.work@gmail.com'
 __description__ = 'Boilerplate for WRAIR VDB projects.'
-__projectname__ = 'python_template'
+__projectname__ = 'your_project'
 __keywords__ = "put keywords here"

@@ -1,16 +1,21 @@
 import re
 import pandas as pd
-from bioframes import to_np_int, sanger_qual_str_to_error
+from bioframes import to_np_int, sanger_qual_str_to_error, qual_to_phreds, makeframe
 from itertools import groupby
-from func import pmap, psplit, pstrip, compose, compose_all, merge_dicts, fzip, partial2, dictmap, starcompose
+from func import pmap, psplit, pstrip, compose, compose_all, merge_dicts, fzip, \
+    partial2, dictmap, starcompose, split_list, nameddict
 from operator import itemgetter
 from functools import partial
 import operator as op
+from operator import attrgetter as attr
 from schema import Schema, Use
-from itertools import ifilter
-# Parse options
+from itertools import ifilter, imap
+import samtools
 #from pyparsing import Regex
 
+#TODO: don't compute quality-ints twice.
+
+''' NOTE: samfiles use ASCII of Phred-scaled base QUALity+33 '''
 parse_array = compose_all(to_np_int, psplit(','), pstrip('[]'))
 tabsplit = psplit('\t')
 
@@ -24,15 +29,10 @@ basic_scheme={
     'RNEXT' : str,
     'PNEXT' : int,
     'TLEN' : int,
-    #'MRNM' : str,
-    #'MRNM' : '*='.__contains__,
-    #'MPOS' : int,
-    #'ISIZE' : int,
     'SEQ' : str,
     'QUAL' : str,
-    #'OPTIONS' : str
 }
-#['OPT', 'MPOS', 'MRNM', 'ISIZE']
+
 basic_schema = Schema(dictmap(Use, basic_scheme))
 
 options_scheme = {
@@ -45,24 +45,10 @@ options_scheme = {
 }
 
 def parse_option(option_str):
-    ''' alternatively:   tag, type, val = option_str.split('\t')  '''
-#_join = partial(reduce, lambda a, b: a+':'+b)
-#    tag_type_val = op.itemgetter(0, 2, 4)
 #    _tag = Regex(r'[A-Za-z][A-Za-z0-9]')
-#    _type = Regex(r'[AifZHB]')
-#    _value = Regex('[^\t]')
-#    full = _tag + ':' + _type + ':' + _value
-    #reduce(operator.add, [tag, _type, value], ':')
-#    parsed_list = full.parseString(option_str)
-#    return tag_type_val(parsed_list)
-
     tag, _type, raw_val = psplit(':')(option_str)
     val = options_scheme[_type](raw_val)
     return tag, val
-
-    #full = _join( [tag, _type, value ] )
-    #parse_array = re.compile(r'[cCsSiIf](,[-+]?[0-9]*\.?[0-9]+([eE][-+]?[0-9]+)?)+').match
-    ''' NOTE: samfiles use ASCII of Phred-scaled base QUALity+33 '''
 
 
 #TODO: handle empty cases (unmapped reads, *)
@@ -74,22 +60,18 @@ def parse_cigar(cigar_str):
     tups = reg.findall(cigar_str)
     key, value = itemgetter(1), itemgetter(0)
     groups = groupby(sorted(tups, key=key), key)
-    get_counts = pmap(compose(int, itemgetter(0)))
+    get_counts = pmap(compose(int, value))
     sum_counts = compose(sum, get_counts)
     s = "cigar_{0}".format
     cigar_dict = dict( (s(name), sum_counts(nums)) for name, nums in groups)
-    #print cigar_dict
     mismatches = sum(num for k, num in cigar_dict.items() if k not in ['cigar_M', 'cigar_='])
     return merge_dicts(cigar_dict, {'cigar_score': mismatches})
 
-#dictmap(compose(sum, get_counts), dict(groups))
-
-#dict(map(reverse, tups))
 ''' assert sum(itemgetter('M', 'I', 'S', '=', 'X')) == len(seq) == len(quality), \
     "cigar string M/I/S/=/X should sum to the length of the query sequence." '''
 
 index = ['QNAME', 'POS', 'RNAME']
-#TODO:
+#TODO: filter unmapped reads
 ''' POS starts at 1 . . . but if POS is set as 0 for an unmapped read without coordinate. If POS is 0, no assumptions can be made about RNAME and CIGAR
 Bit 0x4 is the only reliable place to tell whether the read is unmapped. If 0x4 is set, no
 assumptions can be made about RNAME , POS , CIGAR , MAPQ , and bits 0x2, 0x100, and 0x800 .'''
@@ -115,15 +97,10 @@ eval_flag = compose(bool, op.and_)
 
 def flag_dict(flag):
     return dict((meaning, eval_flag(bit, flag)) for bit, meaning in flag_meanings.items())
-def split_list(A, idx):
-    return A[:idx], A[idx:]
 
 sam_columns = ("QNAME", "FLAG", "RNAME", "POS", "MAPQ", "CIGAR", "RNEXT", "PNEXT", "TLEN", "SEQ", "QUAL") #optiosn
 
 
-#TODO: get_record function takes a filehandle and returns a single record via SeqIO, etc.
-#So functions expect a dictionary I guess
-#pass
 parse_options = compose(dict, pmap(parse_option)) #, tabsplit)
 #readfields = compose(tabsplit, next)
 line_to_dict = compose_all(dict, partial(zip, sam_columns)) #, tabsplit)
@@ -139,12 +116,65 @@ get_error = compose(sanger_qual_str_to_error, itemgetter('QUAL'))
 def load_sam(fh):
     dicts = map(get_row, ifilter(bool, fh.read().split('\n')))
     return pd.DataFrame(dicts)
-#TODO: do we really need indices? it complicates querying i tlooks like maybe where plays better with them
 # .set_index(index) #, index=index, columns=columns)
 
 
 def get_row(row):
     result = all_but_cigar_dict(row)
     return merge_dicts(result, get_cigar_dict(result), get_flag_dict(result), {'error' :  get_error(result)})
+
+
+def pileframe(fh):
+    obj_attributes = ('ref','pos','refbase','depth','_bases','_bquals')# + ('error', 'qual_ints')#,'_mquals = parts
+    columns =        ('chrom', 'pos', 'refbase', 'depth', 'bases', 'quals')# + ('error', 'qual_ints') #optionall bquals
+    getters = map(attr, obj_attributes)
+    iter_rows = imap(samtools.MPileupColumn, fh)
+    dictgetters =  {
+        'error' : compose(sanger_qual_str_to_error, itemgetter('quals')),
+        'qual_ints' : compose(qual_to_phreds, itemgetter('quals'))
+    }
+
+
+  #  def initialize():
+  #      return collection_as_df(list(getters), columns, list(iter_rows))
+
+    #df = initialize()
+    return {
+        'obj_func' : partial(next, iter_rows),
+        'columns' : columns,
+        'getters' : getters,
+        'validator' : None,
+        'dictgetters' : dictgetters
+    }
+
+load_pileup = compose(makeframe, pileframe)
+    #return nameddict('PileupFrame',  { 'df' : df })
+
+def collection_as_df(lambdas, columns, collection):
+    '''
+    Create a pandas DataFrame by applying a series of functions to a collection.
+    :param list lambdas: a list of functions which take exactly one argument (an objects in collection)
+    :param list columns: (str) the column names, in order with lambdas
+    :param list collection: a list of objects which are valid arguments for the lambdas.
+    :return pandas.DataFrame the lambda results on the collection objects as a Matrix.
+    '''
+    assert len(lambdas) == len(columns), "lambdas must have same length as columns"
+    '''use list here to force the evaluation of the functions. otherwise the lambda grabs the last obj evaluated from collection, as in a closure.'''
+    values = (list( func(obj) for func in lambdas) for obj in collection)
+    return pd.DataFrame(values, columns=columns)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 

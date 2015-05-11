@@ -12,7 +12,7 @@ install:
 before_script:
     - export PATH=$PATH:$PWD/bin
 script: 
-    - nosetests --with-coverage --cover-erase --cover-package=python_template 
+    - nosetests --with-coverage --cover-erase --cover-package=your_project 
     - pybot tests/robot.txt
 after_success:
     - coveralls

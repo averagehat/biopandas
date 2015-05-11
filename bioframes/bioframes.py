@@ -2,14 +2,16 @@ from __future__ import print_function
 from functools import partial
 from Bio import SeqIO
 import numpy as np
-#from past.builtins import map, filter
-#from bioframes import sequenceframes
 from operator import attrgetter as attr
-from operator import add, div, itemgetter
+from operator import add, div, itemgetter, methodcaller
 from func import partial2, compose, pmap, pifilter,  \
     psplit,  _id, compose_all, ilen, merge_dicts, starcompose, dictzip, \
-    apply_to_object, dictmap, kstarcompose, cmp2, pjoin
-
+    apply_to_object, dictmap, kstarcompose, cmp2, pjoin, nameddict, \
+    iter_until_stop, flatten_list
+from itertools import starmap, repeat
+from Bio.Seq import Seq
+from Bio.Alphabet import generic_dna
+from Bio.SeqRecord import SeqRecord
 import pandas as pd
 import vcf
 #TODO:
@@ -26,12 +28,6 @@ Pileup
 Join VCF and Pileup
 '''
 
-'''
-pcompose = partial(partial, compose)
-error_from_ints = pcompose(error)
-#sanger_qual_str_to_error = cmperror(qual_to_phreds)
-
-'''
 get_fastq = partial(SeqIO.parse, format='fastq')
 get_fasta = partial(SeqIO.parse, format='fasta')
 to_np_int = partial(np.array, dtype=int)
@@ -43,24 +39,9 @@ qual_int_sanger = compose(minus33, ord)
 ''' Error = 10^-(Phred/10) '''
 qual_to_phreds = compose(to_np_int, pmap(qual_int_sanger))
 error = compose(partial(pow, 10), partial2(div, -10.0))
-#don't need to map because numpy vectorizes it automatically
 #TODO: handle non-sanger version
 sanger_qual_str_to_error = compose(error, qual_to_phreds)
-
-
-
-
 #SANGER_OFFSET = 33
-
-'''
-assert len(quality) == len(error) == len(phred_scores)
-'''
-
-
-#validate = scheme.validate
-#TODO: could make these validations match samtools spec
-#TODO: Could treat options/cigar string as their own class with their own parsing and validation.
-
 
 def flatten_vcf(record):
 
@@ -74,31 +55,16 @@ def flatten_vcf(record):
     d.update(dict((_id, flatten_list(field)) for _id, field in record.INFO.items()))
     return d
 
-def collection_as_df(lambdas, columns, collection):
-    '''
-    Create a pandas DataFrame by applying a series of functions to a collection.
-    :param list lambdas: a list of functions which take exactly one argument (an objects in collection)
-    :param list columns: (str) the column names, in order with lambdas
-    :param list collection: a list of objects which are valid arguments for the lambdas.
-    :return pandas.DataFrame the lambda results on the collection objects as a Matrix.
-    '''
-    assert len(lambdas) == len(columns), "lambdas must have same length as columns"
-    '''use list here to force the evaluation of the functions. otherwise the lambda grabs the last obj evaluated from collection, as in a closure.'''
-    values = (list( func(obj) for func in lambdas) for obj in collection)
-    return pd.DataFrame(values, columns=columns)
-
+#TODO: properly handle [None], '-', etc.
 def load_vcf(vcf_records):
     '''
     Convert a list of vcf Records to a pandas DataFrame.
     '''
     return pd.DataFrame(flatten_vcf(rec) for rec in vcf_records)
-flatten_list = lambda a: a if type(a) != list else a[0]
 load_vcf  = compose(load_vcf, vcf.Reader)
-#TODO: properly handle [None], '-', etc.
 
-#have one return the true/false series and the other do getitem i guess
-#return_frame = partial(compose, df.__getitem__)
 return_frame = partial(compose, pd.DataFrame.__getitem__)
+
 def col_compare(df, col, value, comp):
     half = partial(comp, value)
     boolean = compose(half, df.__getitem__)
@@ -112,32 +78,15 @@ def ambiguous(df):
 def vcalls(df):
     return df[df.REF != df.CB]
 
-def df_by_attrs(columns, collection):
-    attr_getters = map(attr, columns)
-    return collection_as_df(attr_getters, columns, collection)
-
-
-
-#optionally dict(zip(columns, apply_each))
-#TODO: fix this, why doesn't repeat work?
 def makeframe(biodata):
-    dicts = []
-    while True:
-        try:
-            dicts.append(_create_dict(**biodata))
-        except StopIteration:
-            break
+    dicts = iter_until_stop(_create_dict, **biodata)
     return pd.DataFrame(dicts)
-
-#make_dicts = pmap(biodata_to_row)
-
-#make_fastq_frame = kstarcompose(makeframe, sequenceframes.fqframe)
 
 def obj_to_dict(obj, names_getters_map):
     apply_to_obj = partial2(apply_to_object, obj)
     return dictmap(apply_to_obj, names_getters_map)
 
-def _create_dict(obj_func, columns, getters, validator, dictgetters):
+def _create_dict(obj_func, columns, getters, validator=None, dictgetters=None):
     obj = apply(obj_func)
     pre_dict = obj_to_dict(obj, dictzip(columns, getters))
     #optional intermediate schema here
@@ -146,43 +95,75 @@ def _create_dict(obj_func, columns, getters, validator, dictgetters):
         full_dict = merge_dicts(pre_dict, extra_dict)
     else:
         full_dict = pre_dict
-    return validator.validate(full_dict)
-#    compose_all(merge_dicts, obj_to_dict, partial2(repeat, 2),
-    #do = starcompose(obj_to_dict, partial2(repeat, 2), obj_to_dict)
-    #return do(obj, dictzip(columns, getters)
+    return full_dict if not validator else validator.validate(full_dict)
 
 
+make_writer = lambda outpath, format: partial(SeqIO.write, format=format, handle=outpath)
+def write_result_seqs(outpath, format, func, **kwargs):
+    ''' write the result of a function that returns Bio.SeqRecord.SeqRecord objects. '''
+    with open(outpath, 'w') as out:
+        writer = make_writer(out, format)
+        writer(func( **kwargs))
+    return outpath
 
-#rewrite
-#unpack_biodata = itemgetter('obj_func', 'columns', 'getters',  'validator','dictgetters')
-#biodata_to_row = starcompose(_create_row, unpack_biodata)
-# optionally add space
 #TODO: how can we have the outfacing function accept both the output filehandle and the df/input handle
-raw_make_id = '>{0} {1}'.format
+raw_make_id = '{0} {1}'.format
 cbs = itemgetter('CB')
 consensus = compose(pjoin(''), cbs)
-chrom_groups = partial(pd.DataFrame.groupby, 'CHROM')
-#write_consensus = compose(writer, ids_with_seqs)
+chrom_groups = partial2(pd.DataFrame.groupby, 'CHROM')
 
-#TODO: have writ_consensus accept an outpath
-#TODO: What?
-def vcf(in_path, id_prefix):
-    writer = lambda f: partial(SeqIO.write, format='fasta', handle=open(f, 'w'))
-    make_id = partial(raw_make_id, id_prefix)
-    ids_with_seqs = compose_all(SeqRecord, cmp2(make_id, consensus), chrom_groups)
-    consensus_from_file = compose(ids_with_seqs, partial(load_vcf, in_path))
-    write_from_file = compose(writer, consensus_from_file)
-    return {'write_consensus' : write_from_file}
+def prepend_value(recs, prefix, name=None):
+    ''' Helper to alter sequence ids. BEWARE: alters recs objects. '''
+    altered_id = compose(partial(raw_make_id, prefix), attr(name))
+    recs = tuple(recs)
+    tuple(starmap(setattr, zip(recs, repeat(name),  map(altered_id, recs))))
+    return recs
 
+prepend_id = partial(prepend_value, name='id')
 
+def make_consensus(_id, group):
+    return SeqRecord(Seq(consensus(group), generic_dna), _id, description='')
 
-    pass
+def vcf(in_path):
+    ''' Write consensus creates a consensus fasta file (from the called bases) for each chromosome. '''
+    df = load_vcf(in_path)
+    def get_consensus(prefix=None):
+        groups = df.groupby('CHROM')
+        seqgen = starmap(make_consensus, groups)
+        return seqgen if not prefix else prepend_id(seqgen, prefix)
 
-#load vcf
-#aggregate them all, then write all at once
+    write_consensus = partial(write_result_seqs, format='fasta', func=get_consensus)
 
+    return nameddict('VCFFrame', {
+        'write_consensus' : write_consensus,
+        'df' : df
+    })
 
-#given a group returun the consensus
-#given a refname and a group,
+def make_matrix(df, column):
+    ''' Make a matrix from a column containing numpy arrays'''
+    matrix = (df[column].ix[i] for i in range(len(df[column])))
+    return pd.DataFrame(matrix, index=df.id ).fillna(0)
 
+phredmatrix = partial(make_matrix, column='qual_ints')
+errormatrix = partial(make_matrix, column='error')
+qualtotals = compose(methodcaller('sum'), phredmatrix)
+makepercent = lambda x: (1 - x) * float(100)
+
+def seq_matrix(df, column):
+    ''' A dataframe representing a 2D matrix of sequences or qualities. '''
+    matrix = make_matrix(df, column)
+
+    mget = partial(partial, matrix.__getitem__)
+    t_plot = partial(matrix.T.plot, kind='bar')
+    boxplot = partial(matrix.plot, kind='box')
+    percentplot = compose(pd.Series.plot, partial(pd.Series.apply, func=makepercent))
+    plot_mean_percent = compose(percentplot, matrix.mean)
+
+    return nameddict('SeqMatrix', {
+        'tplot' : t_plot,
+        'boxplot' : boxplot,
+        'meanplot' : plot_mean_percent,
+        'percentplot' : percentplot,
+        'm' : matrix
+    })
 

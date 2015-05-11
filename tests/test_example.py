@@ -1,5 +1,5 @@
 import unittest
-from python_template import python_template
+from your_project import your_project
 import os
 import sys
 from functools import partial
@@ -12,8 +12,8 @@ THISD = os.path.dirname(os.path.abspath(__file__))
 here = partial(os.path.join, THISD)
 class Test(unittest.TestCase):
     def test_returns_true(self):
-        self.assertEquals(True, python_template.returns_true())
-        self.assertTrue(python_template.returns_true())
+        self.assertEquals(True, your_project.returns_true())
+        self.assertTrue(your_project.returns_true())
 
     def test_will_pass(self):
         self.assertTrue(True)

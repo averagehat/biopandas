@@ -3,6 +3,7 @@ import itertools as it
 import string
 import sys
 from collections import namedtuple
+from operator import itemgetter, attrgetter as attr
 
 PY3 = sys.version[0] == '3'
 imap, ifilter, izip = (map, filter, zip) if PY3 else (it.imap, it.ifilter, it.izip)
@@ -133,3 +134,20 @@ def kstarcompose(*funcs):
     return reduce(kstarcompose2, funcs)
 
 #kstarcompose = partial(reduce, kstarcompose2)
+
+#use str.endswith( (tuple, of, vals)
+extension = compose(itemgetter(-1), psplit('.'))
+fileext = compose(extension, attr('filename'))
+
+
+def iter_until_stop(f, *args, **kwargs):
+    while True:
+        try:
+            yield f(*args, **kwargs)
+        except StopIteration:
+            break
+
+flatten_list = lambda a: a if type(a) != list else a[0]
+
+def split_list(A, idx):
+    return A[:idx], A[idx:]

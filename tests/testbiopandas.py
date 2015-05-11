@@ -1,17 +1,19 @@
 import mock
 from operator import attrgetter as attr, methodcaller
 from Bio.Seq import Seq
+from numpy import array
 from Bio import SeqIO
 from Bio.SeqRecord import SeqRecord
 import unittest
 import sys
 import pandas as pd
 from pandas.util.testing import assert_series_equal, assert_frame_equal, assert_index_equal
-from numpy.testing import assert_array_equal, assert_array_almost_equal
+from numpy.testing import assert_array_equal, assert_array_almost_equal, assert_almost_equal
 import bioframes
 import sequenceframes
 from functools import partial
 #from bioframes.bioframes import makeframe
+from biotest import here, BioTest
 import numpy as np
 from operator import itemgetter
 if sys.version[0] == '2':
@@ -89,7 +91,6 @@ FFFFFFFFF
 
 #TODO: fix this test
     def test_dataframe_contents(self):
-        from numpy import array
         q1, q2, q3, q4 = (array([ 0.00019953,  0.00019953,  0.00019953,  0.00019953,  0.00019953, 0.00019953,  0.00019953,  0.00019953,  0.00019953]), \
                           array([ 0.00063096,  0.00019953,  0.00019953,  0.00031623,  0.00031623, 0.00031623,  0.00031623,  0.00031623]), \
                           array([ 0.00019953,  0.00019953,  0.00079433,  0.00079433,  0.00079433, 0.00019953,  0.00079433,  0.00019953]), \
@@ -107,6 +108,37 @@ FFFFFFFFF
         expected_qual_ints = np.array( [32, 37, 37, 35, 35, 35, 35, 35])
         expected2 = pd.Series(  itemgetter(0, -1, 0, -2, 2, 1)(['read2', 'CTTCGATC', 'AFFDDDDD', expected_qual_ints, q2]))
         map(self.gen_assert, expected2, r2)
+
+    def test_qualmatrix(self):
+       q1, q2, q3, q4 = (array([ 0.00019953,  0.00019953,  0.00019953,  0.00019953,  0.00019953, 0.00019953,  0.00019953,  0.00019953,  0.00019953]), \
+                         array([ 0.00063096,  0.00019953,  0.00019953,  0.00031623,  0.00031623, 0.00031623,  0.00031623,  0.00031623, 0]), \
+                         array([ 0.00019953,  0.00019953,  0.00079433,  0.00079433,  0.00079433, 0.00019953,  0.00079433,  0.00019953, 0]), \
+                         array([ 0.00019953,  0.00019953,  0.00019953,  0.00019953,  0.00019953, 0.00019953,  0.00019953,  0.00019953,  0.00019953]))
+       A = np.array([q1, q2, q3, q4])
+       result = bioframes.errormatrix(self.df)
+       assert_almost_equal(result.sum().sum(), A.sum(), decimal=5)
+
+class QueryTests(BioTest):
+    def test_consensus_functional(self):
+        invcf = here('780.bam.vcf')
+        vcf = bioframes.vcf(open(invcf))
+        actualpath = vcf.write_consensus(here('test.out.fasta'), prefix='780')
+        afn, rfn = open(here(actualpath)), open(here('780.bam.consensus.fasta'))
+        self.seqs_equal(afn, rfn, 'fasta')
+        afn, rfn = open(here(actualpath)), open(here('780.bam.consensus.fasta'))
+        self.assertFilesEqual(afn, rfn, sort=True)
+
+    def test_consensus_functional_noprepend(self):
+        invcf = here('780.bam.vcf')
+        vcf = bioframes.vcf(open(invcf))
+        actualpath = vcf.write_consensus(here('test.out.fasta'))
+        afn, rfn = open(here(actualpath)), open(here('780.bam.noid.fasta'))
+        self.seqs_equal(afn, rfn, 'fasta')
+        afn, rfn = open(here(actualpath)), open(here('780.bam.noid.fasta'))
+        self.assertFilesEqual(afn, rfn, sort=True)
+
+
+
 
 
 

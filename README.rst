@@ -1,14 +1,14 @@
-python_template
+BioFrames
 ===============
 .. image:: https://readthedocs.org/projects/python-template/badge/?version=latest
     :target: http://python-template.readthedocs.org/en/latest/
     :alt: Documentation Status
 
-.. image:: https://travis-ci.org/VDBWRAIR/python_template.svg
-    :target: https://travis-ci.org/VDBWRAIR/python_template
+.. image:: https://travis-ci.org/VDBWRAIR/your_project.svg
+    :target: https://travis-ci.org/VDBWRAIR/your_project
 
-.. image:: https://coveralls.io/repos/VDBWRAIR/python_template/badge.svg
-    :target: https://coveralls.io/r/VDBWRAIR/python_template
+.. image:: https://coveralls.io/repos/VDBWRAIR/your_project/badge.svg
+    :target: https://coveralls.io/r/VDBWRAIR/your_project
 
 
 This is the template for WRAIR python projects that will help you quickly setup
@@ -16,58 +16,17 @@ a base project that you can easily expand upon.
 
 Features
 --------
+Currently supports .sam, .vcf, .fastq and pileup formats. 
+Basic support methods for viewing & plotting quality as a matrix
+filter vcf files
 
-* .travis.yml to hook in with https://travis-ci.org
-* .travis.yml pushes to https://coveralls.io
-* sphinx docs directory for your documentation that can be hooked into 
-  Read The Docs
-* tox.ini to allow you to easily run tests through different python environments
-* tests directory stub
-* python package directory
-* setup.py installation script
+To Do
+-----
+Accept fasta files
+Simplified frame merges
+frame diffing
+ipython notebook examples
 
-How To Use
-----------
-
-#. Clone this repo
-#. Rename the directory to your project name
-#. Modify the git origin remote so it points to your new project's github 
-   project
-#. Anywhere you see python_template you will need to rename that to your
-   project name.
-   The following should work to rename all python_template to your_project
-
-    .. code-block:: bash
-
-        find . -path ./.git -prune -o -type f -exec sed -i 's/python_template/your_project/g' {} \;
-
-Travis CI
----------
-
-#. Head over to https://travis-ci.org
-#. You should be able to sign up with your github account here.
-#. On the left side of the page you will see 'My Repositories', 'Recent' and
-   a plus symbol. Click the plus symbol to list all your github repos.
-#. Click the 'sync' button to make sure all your github repos are synced such
-   that travis can see them
-#. Find your project in the list and slide the toggle switch to green
-
-Coveralls IO
-------------
-
-#. Head over to https://coveralls.io
-#. You should be able to sign up with your github account here.
-#. Click Add Repos
-#. Click sync github repos
-#. Find your project and slide the toggle switch to On
-
-Read The Docs
--------------
-
-#. Head over to https://readthedocs.org
-#. Sign up for an account
-#. Click import a project
-#. Select Import from GitHub
-#. Click sync your github projects
-#. Find your project and click Create
-#. Click Next
+Notes
+-----
+Currently importing may not be working, run nosetests with PYTHONPATH=PYTHONPATH:/home/AMED/michael.panciera/projects/biopandas/bioframes/:$PWD nosetests
