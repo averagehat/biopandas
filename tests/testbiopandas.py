@@ -2,12 +2,13 @@ import mock
 from Bio.Seq import Seq
 from Bio.SeqRecord import SeqRecord
 import unittest
-from bioframes import bioframes as bf
+#from bioframes import bioframes as bf
+from bioframes import sequenceframes
 import sys
 import pandas as pd
 from pandas.util.testing import assert_series_equal, assert_frame_equal, assert_index_equal
 from numpy.testing import assert_array_equal, assert_array_almost_equal
-
+from bioframes import bioframes
 import numpy as np
 from operator import itemgetter
 if sys.version[0] == '2':
@@ -43,13 +44,21 @@ TTTCGAATC
 FFFFFFFFF
 '''
         with open('tmp.fq', 'w') as tmp: tmp.write(self.fastq_string)
-        self.df = bf.load_fastq(open('tmp.fq'))
+        fq = sequenceframes.fqframe(open('tmp.fq'))
+        #self.df = sequenceframes.load_fastq(open('tmp.fq'))
+        self.df = bioframes.makeframe(fq)
+#        self.df = fq.load_fastq()
+#        r_dict = fq.get_row(self.r)
+#        self.series = pd.Series(r_dict)
+        #r_dict = sequenceframes.get_row(self.r)
+
+
+        #TODO: somehow SeqIO broke when I tried to mock_open
+
 #        with mock.patch.object(builtins, 'open', mock.mock_open(read_data=self.fastq_string)): #, create = True) as m:
 #            with open('_') as handle:
 #                self.df = bf.load_fastq(handle)
         #self.df = mock_file(bf.load_fastq, read_data=self.fastq_string)
-        r_dict = bf.get_row(self.r)
-        self.series = pd.Series(r_dict)
 
     def test_sanger_quality_error(self):
         expected = np.array([.1,  .01, .001, .0001, .00001][::-1])

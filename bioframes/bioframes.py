@@ -1,14 +1,18 @@
 from __future__ import print_function
 from functools import partial
 from Bio import SeqIO
-import pandas as pd
 import numpy as np
-from past.builtins import map, filter
+#from past.builtins import map, filter
+#from bioframes import sequenceframes
 from operator import attrgetter as attr
 from operator import add, div, itemgetter
-from func import partial, partial2, compose, pmap, pfilter, pstrip, psplit, fzip, _id, compose_all
+from func import partial2, compose, pmap, pifilter,  \
+    psplit,  _id, compose_all, ilen, merge_dicts, starcompose, dictzip, \
+    apply_to_object, dictmap, kstarcompose
+
 from itertools import repeat
-from schema import Schema
+import pandas as pd
+import vcf
 #TODO:
 
 def check_np_type(_type_str):
@@ -23,111 +27,35 @@ Pileup
 Join VCF and Pileup
 '''
 
-class BioFrame(pd.DataFrame):
-    def find_duplicates(frame):
-        ''' not sure why this one works. '''
-        ''' for example, find pcr duplicates by finding duplicate reads'''
-        #df2[df2['b'] == df2['b'] & (df2['a'] == df2['a'])]
-        ''' duplicated by defaults returns all but the first occurrence; take_last takes only the first occurence,
-        so unioning them (via | (or)), returns all duplicates. accepts any number of keys. '''
-        frame[frame.duplicated(['b'],take_last=True) | frame.duplicated(['b'])]
+'''
+pcompose = partial(partial, compose)
+error_from_ints = pcompose(error)
+#sanger_qual_str_to_error = cmperror(qual_to_phreds)
 
-
+'''
+get_fastq = partial(SeqIO.parse, format='fastq')
+get_fasta = partial(SeqIO.parse, format='fasta')
 to_np_int = partial(np.array, dtype=int)
+gccontent = compose(ilen, pifilter('GC'.__contains__))
+
 minus33 = partial(add, -33)
 qual_int_sanger = compose(minus33, ord)
+
 ''' Error = 10^-(Phred/10) '''
 qual_to_phreds = compose(to_np_int, pmap(qual_int_sanger))
-error = compose(partial(pow, 10), partial2(div, -10))
-qual_to_error = compose(pmap(error), qual_to_phreds)
+error = compose(partial(pow, 10), partial2(div, -10.0))
+#don't need to map because numpy vectorizes it automatically
+#TODO: handle non-sanger version
+sanger_qual_str_to_error = compose(error, qual_to_phreds)
 
 
-get_fastq = partial(SeqIO.parse, format='fastq')
-def init_all(fileh):
-    fq = get_fastq(fileh)
-    dicts = map(get_row, fq)
-    return pd.DataFrame(dicts).set_index(index) #, index=index, columns=columns)
 
 
 #SANGER_OFFSET = 33
-columns = ('id', 'seq', 'quality', 'description', 'qual_ints', 'error')
-SANGER = True
-get_id = attr('id')
-get_seq= compose(str, attr('seq'))
-get_qual_ints = compose_all(np.array, itemgetter('phred_quality'), attr('_per_letter_annotations'))
-get_description = attr('description')
-get_quality = SeqIO.QualityIO._get_sanger_quality_str
-#get_error = compose_all(np.array, pmap(error), get_qual_ints)
-get_error = compose_all(np.vectorize(error), get_qual_ints)
-''' applies directly to the seqrecord object '''
-index = ['id']
 
-#TODO: fix for 32-bit systems
-final_schema =  Schema({
-    'id' : str,
-    'seq' : str,
-    'quality' : str,
-    'qual_ints' : check_np_type('int64'),
-    'error' : check_np_type('float64'),
-    'description' : str
-})
-_object = _id
-
-
-def init(fileh):
-    return pd.DataFrame(index=index, columns=columns)
-
-def apply_each(funcs, arg):
-    return fzip(funcs, repeat(arg))
-
-def get_row(record):
-    #record = next(fileh)
-    import sys
-    __module__ = sys.modules[__name__]
-    clen = len(columns)
-    get_getter = compose(attr, "get_{0}".format)
-    _getters = map(get_getter, columns)
-    self_getters = apply_each(_getters, __module__) #fzip(_getters, repeat(__module__, clen))
-    results = apply_each(self_getters, record)
-    final_dict = dict(zip(columns, results))
-    final_schema.validate(final_dict)
-    return final_dict
-    #return pd.DataFrame(final_dict, index=index)
-
-#get_fastq_row = compose(get_row, get_fastq)
-load_fastq = init_all
-class Seq(object):
-    get_record = partial(SeqIO.parse, format='fastq')
-    #SANGER_OFFSET = 33
-    columns = ('id', 'seq', 'quality', 'description', 'qual_ints', 'error')
-    SANGER = True
-    get_id = attr('id')
-    get_seq= compose(str, attr('seq'))
-    get_qual_ints = compose(itemgetter('phred_quality'), attr('_per_letter_annotations'))
-    get_description = attr('description')
-    get_quality = SeqIO.QualityIO._get_sanger_quality_str
-    get_error = compose(pmap(error), get_qual_ints)
-#    phred_to_char = chr if not SANGER else compose(chr, lambda a: a - 33)
-#    get_qual_chars = compose(pmap(phred_to_char), get_qual_ints)
-    ''' applies directly to the seqrecord object '''
-    index = ['id']
-
-#get_final_dict = compose(self_getters, get_record)
-    #TODO: fix for 32-bit systems
-    final_schema =  {
-        'id' : str,
-        'seq' : str,
-        'quality' : str,
-        'qual_ints' : check_np_type('int64'),
-        'error' : check_np_type('float64')
-    }
-    _object = _id
-    '''
-    assert len(quality) == len(error) == len(phred_scores)
-    '''
-
-
-
+'''
+assert len(quality) == len(error) == len(phred_scores)
+'''
 
 
 #validate = scheme.validate
@@ -136,11 +64,12 @@ class Seq(object):
 
 
 def flatten_vcf(record):
+
     '''
     :param VCFRecord record: VCFRecord object
     :return dict: all fields as a flat dictionary, including those fields in rec.INFO
     '''
-    _ids = ['CHROM', 'REF', 'QUAL', 'POS', 'ALT', 'FILTER', 'FORMAT', 'ID', 'INFO']
+    _ids = ['CHROM', 'REF', 'QUAL', 'POS', 'ALT', 'FILTER', 'FORMAT', 'ID'] #'INFO'
     fields = [getattr(record, _id) for _id in _ids]
     d = dict( (_id, value) for  _id, value in zip(_ids, fields) )
     d.update(dict((_id, flatten_list(field)) for _id, field in record.INFO.items()))
@@ -159,7 +88,29 @@ def collection_as_df(lambdas, columns, collection):
     values = (list( func(obj) for func in lambdas) for obj in collection)
     return pd.DataFrame(values, columns=columns)
 
+def load_vcf(vcf_records):
+    '''
+    Convert a list of vcf Records to a pandas DataFrame.
+    '''
+    return pd.DataFrame(flatten_vcf(rec) for rec in vcf_records)
+flatten_list = lambda a: a if type(a) != list else a[0]
+load_vcf  = compose(load_vcf, vcf.Reader)
+#TODO: properly handle [None], '-', etc.
 
+#have one return the true/false series and the other do getitem i guess
+return_frame = partial(compose, df.__getitem__)
+def col_compare(df, col, value, comp):
+    half = partial(comp, value)
+    boolean = compose(half, df.__getitem__)
+    return boolean(col)
+
+simple_compare = return_frame(col_compare)
+
+def ambiguous(df):
+    return df[~df.CB.isin(list('AGCT'))]
+
+def vcalls(df):
+    return df[df.REF != df.CB]
 
 def df_by_attrs(columns, collection):
     attr_getters = map(attr, columns)
@@ -167,17 +118,40 @@ def df_by_attrs(columns, collection):
 
 
 
-#    np_type = attr('dtype')
-#    pis = partial(partial2, operator.is_)
-#    dtype_is = compose(pis, np.dtype)
-#    np_type_check = compose(dtype_is, attr('dtype'))
-#    compose(attr) foo
+#optionally dict(zip(columns, apply_each))
+#TODO: fix this, why doesn't repeat work?
+def makeframe(biodata):
+    dicts = []
+    while True:
+        try:
+            dicts.append(_create_dict(**biodata))
+        except StopIteration:
+            break
+    return pd.DataFrame(dicts)
 
-#class VCF(object):
-    #TODO: uncommnet
-#    fields = ['CHROM', 'REF', 'QUAL', 'POS', 'ALT', 'FILTER', 'FORMAT', 'ID', 'INFO']
-#    flat_vcf = flatten_vcf(_self)
-#    columns =  flat_vcf.keys()
-#    attrs = map(attr, fields)
-#    _object = _id
+#make_dicts = pmap(biodata_to_row)
 
+#make_fastq_frame = kstarcompose(makeframe, sequenceframes.fqframe)
+
+def obj_to_dict(obj, names_getters_map):
+    apply_to_obj = partial2(apply_to_object, obj)
+    return dictmap(apply_to_obj, names_getters_map)
+
+def _create_dict(obj_func, columns, getters, validator, dictgetters):
+    obj = apply(obj_func)
+    pre_dict = obj_to_dict(obj, dictzip(columns, getters))
+    #optional intermediate schema here
+    if dictgetters:
+        extra_dict = obj_to_dict(pre_dict, dictgetters)
+        full_dict = merge_dicts(pre_dict, extra_dict)
+    else:
+        full_dict = pre_dict
+    return validator.validate(full_dict)
+#    compose_all(merge_dicts, obj_to_dict, partial2(repeat, 2),
+    #do = starcompose(obj_to_dict, partial2(repeat, 2), obj_to_dict)
+    #return do(obj, dictzip(columns, getters)
+
+
+#rewrite
+#unpack_biodata = itemgetter('obj_func', 'columns', 'getters',  'validator','dictgetters')
+#biodata_to_row = starcompose(_create_row, unpack_biodata)
